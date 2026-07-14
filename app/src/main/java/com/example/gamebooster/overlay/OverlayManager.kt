@@ -1,19 +1,18 @@
 package com.example.gamebooster.overlay
 
 import android.annotation.SuppressLint
-import android.content.Context
+import android.app.Activity
 import android.graphics.Color
-import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.WindowManager
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
 import com.example.gamebooster.util.PerfMonitor
 
 @SuppressLint("ClickableViewAccessibility", "SetTextI18n")
-class OverlayManager(private val context: Context) {
+class OverlayManager(private val activity: Activity) {
 
-    private val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var bubbleView: TextView? = null
     private var perfMonitor: PerfMonitor? = null
     private var isFpsEnabled = false
@@ -25,18 +24,15 @@ class OverlayManager(private val context: Context) {
 
     fun detach() {
         stopFpsMonitor()
-        bubbleView?.let { runCatching { wm.removeView(it) } }
+        val decorView = activity.window.decorView as? ViewGroup
+        bubbleView?.let { decorView?.removeView(it) }
         bubbleView = null
     }
 
-    private fun overlayType(): Int =
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-
     private fun showBubble() {
-        val bubble = TextView(context).apply {
+        val decorView = activity.window.decorView as? ViewGroup ?: return
+
+        val bubble = TextView(activity).apply {
             text = "⚡"
             textSize = 18f
             setTextColor(Color.WHITE)
@@ -44,16 +40,14 @@ class OverlayManager(private val context: Context) {
             setPadding(24, 24, 24, 24)
         }
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+        // Gunakan FrameLayout.LayoutParams karena DecorView pada dasarnya adalah FrameLayout
+        val params = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 300
+            leftMargin = 50
+            topMargin = 300
         }
 
         var initialX = 0
@@ -65,8 +59,8 @@ class OverlayManager(private val context: Context) {
         bubble.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x
-                    initialY = params.y
+                    initialX = params.leftMargin
+                    initialY = params.topMargin
                     touchX = event.rawX
                     touchY = event.rawY
                     moved = false
@@ -75,11 +69,11 @@ class OverlayManager(private val context: Context) {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - touchX).toInt()
                     val dy = (event.rawY - touchY).toInt()
-                    // Toleransi pergerakan agar tidak dianggap klik tidak sengaja saat menggeser
                     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) moved = true
-                    params.x = initialX + dx
-                    params.y = initialY + dy
-                    wm.updateViewLayout(v, params)
+                    
+                    params.leftMargin = initialX + dx
+                    params.topMargin = initialY + dy
+                    v.layoutParams = params
                     true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -92,7 +86,7 @@ class OverlayManager(private val context: Context) {
             }
         }
 
-        wm.addView(bubble, params)
+        decorView.addView(bubble, params)
         bubbleView = bubble
     }
 
